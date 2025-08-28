@@ -1,0 +1,8 @@
+beautifulsoup4
+bs4
+requests
+streamlit
+fastapi
+pydantic
+uvicorn
+dotenv
