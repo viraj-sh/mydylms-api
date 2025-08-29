@@ -17,20 +17,24 @@ def d_attendance(token):
             continue  
 
         subject = cells[0].text.strip()
-        total_classes = cells[1].text.strip()
+        total_classes = int(cells[1].text.strip())
         present_cell = cells[2].find("p")
         absent_cell = cells[3].find("p")
 
-        # Extract attenid if present in either present/absent cell
         attenid = None
         if present_cell and present_cell.has_attr("attenid"):
-            attenid = present_cell["attenid"]
+            attenid = int(present_cell["attenid"])
         elif absent_cell and absent_cell.has_attr("attenid"):
-            attenid = absent_cell["attenid"]
+            attenid = int(absent_cell["attenid"])
 
-        present = cells[2].text.strip()
-        absent = cells[3].text.strip()
-        percentage = cells[4].text.strip()
+        present_str = cells[2].text.strip().replace("--", "")
+        present = int(present_str) if present_str else None
+
+        absent_str = cells[3].text.strip().replace("--", "")
+        absent = int(absent_str) if absent_str else None
+
+        percentage_str = cells[4].text.strip().replace("--", "")
+        percentage = float(percentage_str) if percentage_str else None
 
         data.append({
             "Subject": subject,
@@ -38,7 +42,7 @@ def d_attendance(token):
             "Present": present,
             "Absent": absent,
             "Percentage": percentage,
-            "altid": attenid  
+            "altid": attenid
         })
 
     return data

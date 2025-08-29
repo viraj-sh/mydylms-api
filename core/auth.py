@@ -1,6 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
-from core.utils import retry_session
+from core.utils import retry_session, fetch_html
+
 
 def get_payload(email, password):
     payload = {
@@ -28,3 +29,16 @@ def login(email, password):
         if cookie.name.lower() == "moodlesession":
             token = cookie.value  
             return token
+
+def verify_token(token: str) -> bool:
+    url = "https://mydy.dypatil.edu/rait/my/"
+
+    html = fetch_html(url, token)
+    if not html:
+        return False
+    soup = BeautifulSoup(html, "html.parser")
+    if soup.body and "notloggedin" in soup.body.get("class", []):
+        return False
+    if soup.select_one("form#login"):
+        return False
+    return True

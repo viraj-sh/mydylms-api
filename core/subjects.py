@@ -1,3 +1,4 @@
+import requests
 from bs4 import BeautifulSoup
 from core.utils import dump_json
 from core.utils import fetch_html
@@ -45,14 +46,19 @@ def parse_documents(html):
 		docs.append({
 			"id": docid,
 			"name": text,
-			"module_type": mod_type
+			"mod_type": mod_type
 		})
 	return docs
 
 def sub(sub_id, token):
     url = f"https://mydy.dypatil.edu/rait/course/view.php?id={sub_id}"
-    html = fetch_html(url, token)
+    try:
+        html = fetch_html(url, token)
+    except requests.exceptions.HTTPError as e:
+        raise ValueError(f"Invalid subject id: {sub_id}") from e
     docs = parse_documents(html) or []
-    dump_json(docs, Path(f"./data/{sub_id}.json"))
+    if not docs:
+        raise ValueError(f"No documents found for subject id: {sub_id}")
+    # dump_json(docs, Path(f"./data/{sub_id}.json"))
     return docs
     

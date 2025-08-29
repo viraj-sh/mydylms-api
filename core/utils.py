@@ -16,6 +16,12 @@ def load_token(env_path: Path) -> str | None:
     config = dotenv_values(env_path)
     return config.get("TOKEN")
 
+def load_json_token(credentials_path: Path) -> str | None:
+    if not credentials_path.exists():
+        return None
+    creds = load_json(Path(credentials_path))
+    return creds["token"]
+
 def remove_token(env_path: Path):
     if not env_path.exists():
         return

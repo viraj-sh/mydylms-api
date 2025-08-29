@@ -5,7 +5,8 @@ from pathlib import Path
 from core.utils import fetch_html
 from bs4 import BeautifulSoup
 
-def sem(url: str, token: str):
+def sem(token: str):
+    url = "https://mydy.dypatil.edu/rait/my"
     html = fetch_html(url, token)
     soup = BeautifulSoup(html, "html.parser")
     semesters = []
@@ -39,7 +40,7 @@ def sem(url: str, token: str):
             if "/course/view.php" in parsed_url.path and "id" in query:
                 subjects.append({
                     "name": a_tag.get_text(strip=True),
-                    "id": query["id"][0]
+                    "id": int(query["id"][0])
                 })
 
         if subjects:
@@ -78,6 +79,6 @@ def sem_sub(json_path: Path, sem_num: int):
         raise ValueError(f"Semester {sem_num} not found in {json_path}")
 
     return [
-        {"id": subj.get("id"), "name": subj.get("name")}
+        {"id": int(subj.get("id")), "name": subj.get("name")}
         for subj in semester_entry.get("subjects", [])
     ]
