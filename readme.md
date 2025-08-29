@@ -13,7 +13,7 @@ pip install -r requirements.txt
 
 ---
 
-### Running the Server
+### Running the Server (Locally)
 
 ```bash
 uvicorn api:app --reload
@@ -23,6 +23,31 @@ API will be available at:
 
 - [http://127.0.0.1:8000](http://127.0.0.1:8000)
 - Swagger UI: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+
+---
+
+### Running with Docker
+
+You can run this API using Docker in two ways:
+
+#### 1. Build Locally
+
+A `Dockerfile` is included in the root directory.
+To build and run:
+
+```bash
+docker build -t mydylms-api .
+docker run -p 8000:8000 mydylms-api
+```
+
+#### 2. Use Prebuilt Image from Docker Hub
+
+A prebuilt image is available on Docker Hub:
+
+```bash
+docker pull virajsh/mydylms-api:latest
+docker run -p 8000:8000 virajsh/mydylms-api:latest
+```
 
 ---
 
