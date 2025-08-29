@@ -1,7 +1,8 @@
 import requests
 from bs4 import BeautifulSoup
-from core.utils import dump_json
-from core.utils import fetch_html
+from core.utils import dump_json, SEM_PATH
+from core.auth import get_token
+from core.utils import fetch_html, load_json
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
@@ -61,4 +62,12 @@ def sub(sub_id, token):
         raise ValueError(f"No documents found for subject id: {sub_id}")
     # dump_json(docs, Path(f"./data/{sub_id}.json"))
     return docs
-    
+
+def load_sub(sub_id: int) -> list[dict]:
+    sub_file = Path(f"./data/subjects/{sub_id}.json")
+    if sub_file.exists():
+        return load_json(sub_file)
+    token = get_token()
+    data = sub(sub_id, token)
+    dump_json(data, sub_file)
+    return data   

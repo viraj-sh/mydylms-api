@@ -6,6 +6,11 @@ from dotenv import load_dotenv, set_key, dotenv_values
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+CREDENTIALS_PATH = Path("./data/credentials.json")
+SEM_PATH = Path("./data/sem.json")
+SUBJECTS_DIR = Path("./data/subjects/")
+ENDLINK_PATH = Path("./data/endlink.json")
+
 def save_token(token: str, env_path: Path):
     load_dotenv(env_path)
     set_key(str(env_path), "TOKEN", token)

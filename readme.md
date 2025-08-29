@@ -1,6 +1,6 @@
-## DY Patil LMS API (Unofficial)
+## MYDY LMS API (Unofficial)
 
-This is a FastAPI-based wrapper for the DY Patil LMS.
+This is a FastAPI-based wrapper for the MYDY LMS.  
 It provides endpoints to access login, semesters, subjects, documents, and attendance data.
 
 ---
@@ -28,6 +28,12 @@ API will be available at:
 
 ### Endpoints Overview
 
+#### Root & Health
+
+- `GET /` – API info message
+- `GET /health` – health check
+- `GET /creds` – view stored credentials
+
 #### Authentication
 
 - `POST /auth/login` – login with email and password, saves token
@@ -36,16 +42,31 @@ API will be available at:
 
 #### Semesters and Subjects
 
-- `GET /sem` – list all semesters
+- `GET /sem` – list all semesters (`?sem_no=` optional, `-1` for latest, or a number within range)
 - `GET /sem/{sem_no}` – list subjects in a semester
-- `GET /sub/{sub_id}` – get documents for a subject
+- `GET /sem/{sem_no}/sub` – list subjects in a semester or fetch subject details with `?sub_id=`
+- `GET /sem/{sem_no}/sub/{sub_id}` – get subject details for a semester subject
+- `GET /sub/{sub_id}` – get subject details
 
-#### Documents
+#### Documents (by Semester/Subject)
 
-- `GET /sub/{sub_id}/doc` – all docs for a subject
-- `GET /sub/{sub_id}/doc/{doc_id}` – single doc info
+- `GET /sem/{sem_no}/sub/{sub_id}/doc` – list all documents for a subject
+- `GET /sem/{sem_no}/sub/{sub_id}/doc/{doc_id}` – get single document info
+- `GET /sem/{sem_no}/sub/{sub_id}/doc/{doc_id}/download` – download a document
+- `GET /sem/{sem_no}/sub/{sub_id}/doc/{doc_id}/view` – view a document inline
+
+#### Documents (by Subject only)
+
+- `GET /sub/{sub_id}/doc` – list all documents for a subject
+- `GET /sub/{sub_id}/doc/{doc_id}` – get single document info
 - `GET /sub/{sub_id}/doc/{doc_id}/download` – download a document
 - `GET /sub/{sub_id}/doc/{doc_id}/view` – view a document inline
+
+#### Documents (direct)
+
+- `GET /doc?doc_id=&mod_type=` – fetch document info
+- `GET /doc/download?doc_id=&mod_type=` – download a document
+- `GET /doc/view?doc_id=&mod_type=` – view a document inline
 
 #### Attendance
 
@@ -58,6 +79,7 @@ API will be available at:
 ### Notes
 
 - Session is managed automatically after `/auth/login`.
+- `GET /creds` shows stored credentials.
 - Documents can be downloaded or viewed inline depending on the endpoint.
 - Data is stored locally in `./data/`.
 

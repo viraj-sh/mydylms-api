@@ -1,7 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
-from core.utils import retry_session, fetch_html
-
+from core.utils import retry_session, fetch_html, load_json_token, CREDENTIALS_PATH, load_json, dump_json
 
 def get_payload(email, password):
     payload = {
@@ -42,3 +41,18 @@ def verify_token(token: str) -> bool:
     if soup.select_one("form#login"):
         return False
     return True
+
+def get_token() -> str:
+    creds = load_json(CREDENTIALS_PATH)
+    if not creds or "email" not in creds or "password" not in creds:
+        raise HTTPException(status_code=500, detail="Email or password not found in credentials.json")
+    email = creds["email"]
+    password = creds["password"]
+    token = creds.get("token")
+    if not token or not verify_token(token):
+        token = login(email, password)
+        if not token:
+            raise HTTPException(status_code=500, detail="Failed to generate token")
+        creds["token"] = token
+        dump_json(creds, CREDENTIALS_PATH)
+    return token

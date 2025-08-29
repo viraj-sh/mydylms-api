@@ -1,5 +1,6 @@
 import re
-from core.utils import fetch_html
+from core.utils import fetch_html, SUBJECTS_DIR, ENDLINK_PATH, load_json, dump_json
+from core.auth import get_token
 from bs4 import BeautifulSoup
 
 def doc(mod_type, doc_id, token):
@@ -49,3 +50,23 @@ def doc(mod_type, doc_id, token):
 		return None
 
 	return None
+
+def help_doc(modtype: str, doc_id: int) -> str | None:
+    token = get_token()  
+    if not ENDLINK_PATH.exists():
+        dump_json([], ENDLINK_PATH)
+
+    endlink_data = load_json(ENDLINK_PATH)  
+
+    for item in endlink_data:
+        if str(item.get("id")) == str(doc_id):
+            print("doc_url Found")
+            return item.get("doc_url")
+
+    doc_url = doc(modtype, doc_id, token)
+    if doc_url:
+        endlink_data.append({"id": doc_id, "doc_url": doc_url})
+        dump_json(endlink_data, ENDLINK_PATH)
+        return doc_url
+
+    return None

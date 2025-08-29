@@ -2,9 +2,11 @@ import requests
 import re
 from bs4 import BeautifulSoup
 from core.utils import fetch_html
+from core.auth import get_token
 
 
-def d_attendance(token):
+def d_attendance():
+    token = get_token()
     url = "https://mydy.dypatil.edu/rait/blocks/academic_status/ajax.php?action=attendance"
     html = fetch_html(url, token)
     soup = BeautifulSoup(html, "html.parser")
@@ -48,7 +50,8 @@ def d_attendance(token):
     return data
 
 
-def o_attendance(token):
+def o_attendance():
+    token = get_token()
     url = f"https://mydy.dypatil.edu/rait/blocks/academic_status/ajax.php?action=myclasses"
     html = fetch_html(url, token)
     soup = BeautifulSoup(html, "html.parser")
@@ -61,7 +64,8 @@ def o_attendance(token):
     return None    
 
 
-def s_attendance(altid, token):
+def s_attendance(altid):
+    token = get_token()
     url = f"https://mydy.dypatil.edu/rait/local/attendance/studentreport.php?id={altid}"
     html = fetch_html(url, token)
     soup = BeautifulSoup(html, "html.parser")

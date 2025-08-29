@@ -2,7 +2,8 @@ import re
 from urllib.parse import urlparse, parse_qs
 from core.utils import load_json
 from pathlib import Path
-from core.utils import fetch_html
+from core.utils import fetch_html, SEM_PATH, dump_json, load_json
+from core.auth import get_token
 from bs4 import BeautifulSoup
 
 def sem(token: str):
@@ -82,3 +83,20 @@ def sem_sub(json_path: Path, sem_num: int):
         {"id": int(subj.get("id")), "name": subj.get("name")}
         for subj in semester_entry.get("subjects", [])
     ]
+
+def load_sem() -> list[dict]:
+    if SEM_PATH.exists():
+        return load_json(SEM_PATH)
+    token = get_token()
+    data = sem(token)
+    dump_json(data, SEM_PATH)
+    return data
+
+def load_semsub(sem_num: int) -> list[dict]:
+    sem_file = Path(f"./data/sem_{sem_num}.json")
+    if sem_file.exists():
+        return load_json(sem_file) 
+    data = load_sem() 
+    subjects = sem_sub(SEM_PATH, sem_num)
+    dump_json(subjects, sem_file)
+    return subjects
