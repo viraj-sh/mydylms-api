@@ -1,3 +1,4 @@
-test.py
-Notes.md
 venv
+__pycache__
+data
+static

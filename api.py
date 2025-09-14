@@ -13,8 +13,22 @@ from core.documents import doc, help_doc
 from core.download import download_file, help_download_file
 from core.attendence import o_attendance, d_attendance, s_attendance
 from schema.pydantic_auth import Auth
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+origins = [
+    "http://127.0.0.1:5500",   # add all your dev URLs here
+    "*",                       # or "*" for all origins (be careful in production)
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],   # Allow all HTTP methods including OPTIONS
+    allow_headers=["*"],
+)
 
 @app.get('/')
 def home():
