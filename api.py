@@ -1,4 +1,5 @@
 import io
+import os
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 from typing import Annotated, Optional
@@ -77,35 +78,37 @@ def authlogin(auth: Auth):
         raise HTTPException(status_code=500, detail=str(e))
     
 @app.get("/auth/token")
-def authtoken():
+def authtoken(regenerate: bool = Query(False)):
     try:
-        token = get_token()
-        status = verify_token(token)
+        token = get_token(regenerate=regenerate)
+        valid = verify_token(token) if token else False
         return JSONResponse(
             status_code=200,
-            content={"token": token, "valid": status}
+            content={"token": token, "valid": valid}
         )
     except Exception as e:
         return JSONResponse(
             status_code=400,
             content={"token": None, "valid": False, "error": str(e)}
         )
-    
-@app.delete('/auth/delete')    
-def authdeltoken():
+
+@app.delete("/auth/delete-token")
+def delete_token():
     creds = load_json(CREDENTIALS_PATH)
-    if creds is None:
+    if not creds:
         raise HTTPException(status_code=404, detail="credentials.json not found")
-    token = creds.get("token", "")
-    if not token:
+    if not creds.get("token"):
         return {"success": False, "message": "Token is not present"}
     creds["token"] = ""
     dump_json(creds, CREDENTIALS_PATH)
-    updated_creds = load_json(CREDENTIALS_PATH)
-    if updated_creds and not updated_creds.get("token"):
-        return {"success": True, "message": "Token deleted"}
-    else:
-        return {"success": False, "message": "Token could not be deleted"}
+    return {"success": True, "message": "Token deleted"}
+
+@app.delete("/auth/delete-creds")
+def delete_creds():
+    if not os.path.exists(CREDENTIALS_PATH):
+        return {"success": False, "message": "Credentials file not found"}
+    os.remove(CREDENTIALS_PATH)
+    return {"success": True, "message": "All credentials deleted"}
     
 @app.get('/sem')    
 def getsemesters(
