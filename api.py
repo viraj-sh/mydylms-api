@@ -1,6 +1,8 @@
 import io
 import os
-from fastapi import FastAPI, HTTPException, Query
+import requests
+import logging
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from typing import Annotated, Optional, List
 from pathlib import Path
@@ -13,11 +15,16 @@ from core.subjects import sub, load_sub
 from core.documents import doc, help_doc
 from core.download import download_file, help_download_file
 from core.attendence import o_attendance, d_attendance, s_attendance
-from schema.pydantic_auth import Auth
+from core.exceptions import add_exception_handlers
+from core.logging_config import setup_logging
+from schema.pydantic_auth import Auth, MessageResponse, HealthResponse, LoginSuccessResponse, LoginFailureResponse, MeResponse, TokenResponse, DeleteResponse
 from schema.pydantic_sem import Subject, Semester, Module
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI()
+setup_logging()
+logger = logging.getLogger("mydylms")
+
+app = FastAPI(title="Unofficial mydylms-api API")
 
 origins = [
     "http://127.0.0.1:5500",   # add all your dev URLs here
@@ -32,82 +39,72 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get('/')
-def home():
-    return {'message':'Unofficial MY-DY-Lms Api'}
+add_exception_handlers(app)
+logger.info("Application startup complete")
 
-@app.get('/health')
+@app.get("/", tags=["System"], summary="Root endpoint", response_model=MessageResponse)
+def home():
+    return {"message": "Unofficial MY-DY-Lms Api"}
+
+@app.get("/health", tags=["System"], summary="Health check", response_model=HealthResponse)
 def health_check():
-    return {
-        'status': 'OK'
-    }
-    
-@app.get("/creds")
-def mycreds():
-    creds = load_json(CREDENTIALS_PATH)
-    if not creds:
-        return {
-            "status": "error",
-            "message": "No credentials found. Please login via /auth/login first."
-        }
-    return {"status": "ok", "credentials": creds}
-    
-@app.post('/auth/login')
+    return {"status": "OK"}
+
+@app.post(
+    "/auth/login",
+    tags=["Auth"],
+    summary="Login and store credentials",
+    responses={
+        200: {"model": LoginSuccessResponse},
+        400: {"model": LoginFailureResponse},
+        503: {"description": "External service unavailable"},
+    },
+)
 def authlogin(auth: Auth):
     try:
         token = login(auth.email, auth.password)
-        if token:
-            credentials = {
-                "email": auth.email,
-                "password": auth.password,
-                "token": token
-            }
-            dump_json(credentials, CREDENTIALS_PATH)
-            return JSONResponse(
-                status_code=201,
-                content={"token": token, "success": True}
-            )
-        return JSONResponse(
-            status_code=400,
-            content={"token": None, "success": False, "message": "Token not found"}
-        )
-    except ValueError as e:
-        # Wrong credentials
-        raise HTTPException(status_code=401, detail=str(e))
-    except RuntimeError as e:
-        # Unexpected login failure
-        raise HTTPException(status_code=500, detail=str(e))
-    
-@app.get("/auth/token")
-def authtoken(regenerate: bool = Query(False)):
+    except requests.exceptions.RequestException as e:
+        raise HTTPException(status_code=503, detail=f"External login service error: {e}")
+
+    if not token:
+        raise HTTPException(status_code=400, detail="Token not found")
+
+    credentials = {"email": auth.email, "password": auth.password, "token": token}
+    dump_json(credentials, CREDENTIALS_PATH)
+    return {"token": token, "success": True, "message": "Login successful"}
+
+@app.get("/auth/me", tags=["Auth"], summary="Get current stored credentials", response_model=MeResponse)
+def authme():
+    creds = load_json(CREDENTIALS_PATH)
+    if not creds:
+        raise HTTPException(status_code=404, detail="No credentials found. Please login first.")
+    safe_creds = {k: v for k, v in creds.items() if k != "password"}
+    return {"status": "ok", "credentials": safe_creds}
+
+@app.get("/auth/token", tags=["Auth"], summary="Get or regenerate token", response_model=TokenResponse)
+def authtoken(regenerate: bool = Query(False, description="Regenerate token if true")):
     try:
         token = get_token(regenerate=regenerate)
         valid = verify_token(token) if token else False
-        return JSONResponse(
-            status_code=200,
-            content={"token": token, "valid": valid}
-        )
+        return {"token": token, "valid": valid}
     except Exception as e:
-        return JSONResponse(
-            status_code=400,
-            content={"token": None, "valid": False, "error": str(e)}
-        )
+        raise HTTPException(status_code=500, detail=f"Token error: {e}")
 
-@app.delete("/auth/delete-token")
+@app.delete("/auth/token", tags=["Auth"], summary="Delete stored token", response_model=DeleteResponse)
 def delete_token():
     creds = load_json(CREDENTIALS_PATH)
     if not creds:
         raise HTTPException(status_code=404, detail="credentials.json not found")
     if not creds.get("token"):
-        return {"success": False, "message": "Token is not present"}
+        return {"success": False, "message": "Token is not present"}  # soft fail, keep as 200
     creds["token"] = ""
     dump_json(creds, CREDENTIALS_PATH)
     return {"success": True, "message": "Token deleted"}
 
-@app.delete("/auth/delete-creds")
+@app.delete("/auth", tags=["Auth"], summary="Delete all stored credentials", response_model=DeleteResponse)
 def delete_creds():
     if not os.path.exists(CREDENTIALS_PATH):
-        return {"success": False, "message": "Credentials file not found"}
+        raise HTTPException(status_code=404, detail="Credentials file not found")
     os.remove(CREDENTIALS_PATH)
     return {"success": True, "message": "All credentials deleted"}
     

@@ -17,8 +17,11 @@ def login(email, password):
     login_url = "https://mydy.dypatil.edu/rait/login/index.php"
     session = retry_session()
     payload = get_payload(email, password)
-    token = session.post(login_url, data=payload, timeout=10)
-    token.raise_for_status()
+    try:
+        token = session.post(login_url, data=payload, timeout=10)
+        token.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        raise
     soup = BeautifulSoup(token.text, "html.parser")
     if soup.select_one("div.loginerrors span.error"):
         raise ValueError("Login failed: Invalid credentials.")
@@ -26,8 +29,7 @@ def login(email, password):
         raise RuntimeError("Login failed for an unknown reason.")
     for cookie in session.cookies:
         if cookie.name.lower() == "moodlesession":
-            token = cookie.value  
-            return token
+            return cookie.value
 
 def verify_token(token: str) -> bool:
     url = "https://mydy.dypatil.edu/rait/my/"

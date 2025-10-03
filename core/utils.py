@@ -49,12 +49,15 @@ def load_json(json_path):
     with json_path.open("r", encoding="utf-8") as f:
         return json.load(f)              
 
-def retry_session():
+def retry_session() -> requests.Session:
     retry_strategy = Retry(
-        total=3,
-        backoff_factor=1,
+        total=5,                # increased retries
+        connect=5,              # retry connection errors
+        read=5,                 # retry read timeouts
+        backoff_factor=1,       # exponential backoff: 1s, 2s, 4s...
         status_forcelist=[502, 503, 504, 408],
-        allowed_methods=["GET", "POST"],
+        allowed_methods=["HEAD", "GET", "OPTIONS", "POST"],  # explicitly allow POST retries
+        raise_on_status=False,  # don't raise immediately, let requests handle it
     )
     adapter = HTTPAdapter(max_retries=retry_strategy)
     session = requests.Session()
