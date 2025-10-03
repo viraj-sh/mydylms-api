@@ -53,51 +53,95 @@ docker run -p 8000:8000 virajsh/mydylms-api:latest
 
 ### Endpoints Overview
 
-#### Root & Health
+#### System
 
-- `GET /` – API info message
-- `GET /health` – health check
-- `GET /creds` – view stored credentials
+- `GET /` – Root endpoint
+  Returns a basic API info message.
+
+- `GET /health` – Health check
+  Returns service status and uptime confirmation.
+
+---
 
 #### Authentication
 
-- `POST /auth/login` – login with email and password, saves token
-- `GET /auth/token` – check if stored token is valid
-- `DELETE /auth/delete` – remove token
+- `POST /auth/login` – Login and store credentials
+  Accepts `email` and `password`, retrieves and saves a valid token locally.
+
+- `GET /auth/me` – Get current stored credentials
+  Returns stored credentials (excluding password).
+
+- `GET /auth/token` – Get or regenerate token
+  Retrieves the current token or regenerates it if requested using `?regenerate=true`.
+
+- `DELETE /auth/token` – Delete stored token
+  Deletes only the saved token while keeping other credentials intact.
+
+- `DELETE /auth` – Delete all stored credentials
+  Deletes the entire stored credentials file.
+
+---
 
 #### Semesters and Subjects
 
-- `GET /sem` – list all semesters (`?sem_no=` optional, `-1` for latest, or a number within range)
-- `GET /sem/{sem_no}` – list subjects in a semester
-- `GET /sem/{sem_no}/sub` – list subjects in a semester or fetch subject details with `?sub_id=`
-- `GET /sem/{sem_no}/sub/{sub_id}` – get subject details for a semester subject
-- `GET /sub/{sub_id}` – get subject details
+- `GET /sem` – Get all semesters
+  Returns a list of all semesters available locally.
 
-#### Documents (by Semester/Subject)
+- `GET /sem/{sem_no}` – Get a specific semester
+  Returns details of the specified semester. Use `-1` to fetch the latest semester.
 
-- `GET /sem/{sem_no}/sub/{sub_id}/doc` – list all documents for a subject
-- `GET /sem/{sem_no}/sub/{sub_id}/doc/{doc_id}` – get single document info
-- `GET /sem/{sem_no}/sub/{sub_id}/doc/{doc_id}/download` – download a document
-- `GET /sem/{sem_no}/sub/{sub_id}/doc/{doc_id}/view` – view a document inline
+- `GET /sem/{sem_no}/sub` – Get all subjects for a semester
+  Returns all subjects in the specified semester.
 
-#### Documents (by Subject only)
+- `GET /sem/{sem_no}/sub/{sub_id}` – Get modules for a specific subject
+  Returns paginated module data for a given subject within a semester.
 
-- `GET /sub/{sub_id}/doc` – list all documents for a subject
-- `GET /sub/{sub_id}/doc/{doc_id}` – get single document info
-- `GET /sub/{sub_id}/doc/{doc_id}/download` – download a document
-- `GET /sub/{sub_id}/doc/{doc_id}/view` – view a document inline
+---
 
-#### Documents (direct)
+#### Documents (by Semester and Subject)
 
-- `GET /doc?doc_id=&mod_type=` – fetch document info
-- `GET /doc/download?doc_id=&mod_type=` – download a document
-- `GET /doc/view?doc_id=&mod_type=` – view a document inline
+- `GET /sem/{sem_no}/sub/{sub_id}/doc` – List all documents of a subject in a semester
+  Returns a paginated list of documents for a subject.
 
-#### Attendance
+- `GET /sem/{sem_no}/sub/{sub_id}/doc/{doc_id}` – Get metadata for a specific document
+  Returns document metadata and related information.
 
-- `GET /attendance` – overall attendance
-- `GET /attendance?filter=detailed` – detailed attendance
-- `GET /attendance/{altid}` – attendance for a subject
+- `GET /sem/{sem_no}/sub/{sub_id}/doc/{doc_id}/view` – View a document inline
+  Streams a document for in-browser viewing.
+
+- `GET /sem/{sem_no}/sub/{sub_id}/doc/{doc_id}/download` – Download a document
+  Downloads the requested document as a file.
+
+---
+
+#### Documents (by Subject)
+
+- `GET /sub/{sub_id}` – Get modules for a subject
+  Returns module data for the specified subject.
+
+- `GET /sub/{sub_id}/doc` – Get all documents of a subject
+  Returns a paginated list of all documents for the given subject.
+
+- `GET /sub/{sub_id}/doc/{doc_id}` – Get metadata of a specific document
+  Returns metadata for the specified document.
+
+- `GET /sub/{sub_id}/doc/{doc_id}/view` – View a document inline
+  Streams a document for in-browser viewing.
+
+- `GET /sub/{sub_id}/doc/{doc_id}/download` – Download a document
+  Downloads the document file.
+
+---
+
+### Notes
+
+- Authentication credentials and tokens are stored locally after a successful `/auth/login`.
+- Use `/auth/me` to view stored credentials (passwords are never returned).
+- Tokens can be regenerated, deleted individually, or removed along with all credentials using `/auth/token` and `/auth`.
+- Most list-based endpoints support pagination using `?page=` and `?page_size=` query parameters.
+- Documents can be either viewed inline or downloaded, depending on the chosen endpoint.
+- Data is cached and stored locally in the `./data/` directory for faster subsequent access.
+- All endpoints return structured JSON responses with `status`, `data`, and (where applicable) `pagination` metadata.
 
 ---
 
