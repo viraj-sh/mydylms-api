@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Dict, Any
 
 
 class Subject(BaseModel):
@@ -33,9 +33,9 @@ class SubjectListResponse(BaseModel):
     data: List[Subject]
 
 
-class ModuleListResponse(BaseModel):
+class ModuleListResponse(BaseModel):  # for /sub/{sub_id}
     status: str
-    data: List[Module]
+    data: List[Dict[str, Any]]
 
 class SemesterResponse(BaseModel):
     status: str

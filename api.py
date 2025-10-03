@@ -2,22 +2,23 @@ import io
 import os
 import requests
 import logging
-from fastapi import FastAPI, HTTPException, Query, Request, Path
+from fastapi import FastAPI, HTTPException, Query, Request, Path, Depends
 from fastapi.responses import JSONResponse
 from typing import Annotated, Optional, List, Dict, Any
 from fastapi.responses import StreamingResponse, FileResponse
 
 from core.auth import login, verify_token, get_token
 from core.utils import dump_json, load_json, load_json_token, CREDENTIALS_PATH
-from core.semester import sem, sem_sub, load_semsub, load_sem, get_valid_sem_no
+from core.semester import sem, sem_sub, load_semsub, load_sem, get_valid_sem_no, validate_sem, validate_sub
 from core.subjects import sub, load_sub
-from core.documents import doc, help_doc
+from core.documents import doc, help_doc, get_doc_entry, guess_media_type, build_streaming_response, get_subject_or_404, get_subject_or_404, get_doc_or_404, get_doc_url_or_500
 from core.download import download_file, help_download_file
 from core.attendence import o_attendance, d_attendance, s_attendance
 from core.exceptions import add_exception_handlers
 from core.logging_config import setup_logging
 from core.pagination import paginate_list
 from schema.pydantic_auth import Auth, MessageResponse, HealthResponse, LoginSuccessResponse, LoginFailureResponse, MeResponse, TokenResponse, DeleteResponse
+from schema.pydantic_doc import DocumentListResponse, DocumentResponse
 from schema.pydantic_sem import Subject, Semester, Module, ListResponse, SemesterListResponse, SubjectListResponse, ModuleListResponse, SemesterResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -157,13 +158,14 @@ def get_subjects(
         )
     return {"status": "ok", "data": subjects}
 
+
 @app.get(
     "/sem/{sem_no}/sub/{sub_id}",
     tags=["Semester"],
     summary="Get modules for a specific subject",
     response_model=ModuleListResponse,
 )
-def get_subject(
+def get_subject_in_semester(
     sem_no: int = Path(..., description="Semester number. Use -1 for latest semester"),
     sub_id: int = Path(..., ge=1, description="Subject ID (>=1)"),
     page: int = Query(1, ge=1),
@@ -191,26 +193,21 @@ def get_subject(
         "pagination": paginated["pagination"],
     }
 
-@app.get('/sem/{sem_no}/sub/{sub_id}/doc')
-def getsubjects(
-    sem_no: int,
-    sub_id: int
+
+@app.get(
+    "/sem/{sem_no}/sub/{sub_id}/doc",
+    tags=["Semester"],
+    summary="List all documents of a subject in a semester",
+    response_model=DocumentListResponse,
+)
+def list_subject_docs(
+    sem_no: int = Path(..., description="Semester number. Use -1 for latest"),
+    sub_id: int = Path(..., ge=1, description="Subject ID (>=1)"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    semesters=Depends(validate_sem),
 ):
-    semester = load_sem()
-    if sem_no ==-1 or (sem_no <= len(semester) and sem_no > 0):
-        pass
-    else:
-        raise HTTPException(status_code=400, detail=f'Invalid Semester Number range(-1 or 1 to {len(semester)})')  
-    
-    semesters = load_semsub(sem_no)
-    
-    if any(item["id"] == sub_id for item in semesters):
-        pass
-    elif sub_id == None:
-        return semesters
-    else:
-        raise HTTPException(status_code=400, detail=f'Subject ID {sub_id} is not present in the Semester {sem_no}')
-    
+    validate_sub(sem_no, sub_id)
     try:
         semsub = load_sub(sub_id)
     except ValueError as e:
@@ -218,308 +215,161 @@ def getsubjects(
 
     results = []
     for entry in semsub:
-        doc_id = entry["id"]
-        mod_type = entry["mod_type"]
-        name = entry["name"]
-
         try:
-            doc_url = help_doc(mod_type, doc_id)
+            doc_url = help_doc(entry["mod_type"], entry["id"])
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error fetching document {doc_id}: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"Error fetching document {entry['id']}: {e}"
+            )
+        results.append({**entry, "doc_url": doc_url})
 
-        results.append({
-            "id": doc_id,
-            "mod_type": mod_type,
-            "name": name,
-            "doc_url": doc_url 
-        })
-
-    return results    
-
-@app.get('/sub/{sub_id}')
-def getsubjects(sub_id: int):
-    try:
-        semsub = load_sub(sub_id)
-        if semsub:
-            return semsub
-    except ValueError as e:
-        raise HTTPException(status_code=401, detail=str(e))    
-    return semsub
-
-@app.get("/sub/{sub_id}/doc")
-def get_all_docs_from_subject(sub_id: int):
-    try:
-        semsub = load_sub(sub_id)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-    results = []
-    for entry in semsub:
-        doc_id = entry["id"]
-        mod_type = entry["mod_type"]
-        name = entry["name"]
-
-        try:
-            doc_url = help_doc(mod_type, doc_id)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error fetching document {doc_id}: {e}")
-
-        results.append({
-            "id": doc_id,
-            "mod_type": mod_type,
-            "name": name,
-            "doc_url": doc_url 
-        })
-
-    return results
-
-@app.get("/sub/{sub_id}/doc/{doc_id}")
-def get_doc_from_subject(sub_id: int, doc_id: int):
-    try:
-        semsub = load_sub(sub_id)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-    doc_entry = next((d for d in semsub if str(d["id"]) == str(doc_id)), None)
-    
-    if not doc_entry:
-        raise HTTPException(status_code=404, detail=f"Document {doc_id} not found in subject {sub_id}")
-
-    mod_type = doc_entry["mod_type"]
-    name = doc_entry["name"]
-    
-    try:
-        doc_url = help_doc(mod_type, doc_id)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching document {doc_id}: {e}")
-    
+    paginated = paginate_list(results, page, page_size)
     return {
-        "id": doc_id,
-        "mod_type": mod_type,
-        "name": name,
-        "doc_url": doc_url 
+        "status": "ok",
+        "data": paginated["items"],
+        "pagination": paginated["pagination"],
     }
 
 
-@app.get('/sem/{sem_no}/sub/{sub_id}/doc/{doc_id}')
-def getsubjects(
-    sem_no: int,
-    sub_id: int,
-    doc_id: int
+@app.get(
+    "/sem/{sem_no}/sub/{sub_id}/doc/{doc_id}",
+    tags=["Semester"],
+    summary="Get metadata for a specific document",
+    response_model=DocumentResponse,
+)
+def get_doc_metadata(
+    sem_no: int = Path(..., description="Semester number"),
+    sub_id: int = Path(..., ge=1),
+    doc_id: int = Path(..., ge=1),
+    semesters=Depends(validate_sem),
 ):
-    semester = load_sem()
-    if sem_no ==-1 or (sem_no <= len(semester) and sem_no > 0):
-        pass
-    else:
-        raise HTTPException(status_code=400, detail=f'Invalid Semester Number range(-1 or 1 to {len(semester)})')  
-    
-    semesters = load_semsub(sem_no)
-    
-    if any(item["id"] == sub_id for item in semesters):
-        pass
-    elif sub_id == None:
-        return semesters
-    else:
-        raise HTTPException(status_code=400, detail=f'Subject ID {sub_id} is not present in the Semester {sem_no}')
-    
+    validate_sub(sem_no, sub_id)
+    doc_entry = get_doc_entry(sub_id, doc_id)
+
     try:
-        semsub = load_sub(sub_id)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    
-    doc_entry = next((d for d in semsub if str(d["id"]) == str(doc_id)), None)    
-    
-    if not doc_entry:
-        raise HTTPException(status_code=404, detail=f"Document {doc_id} not found in subject {sub_id}")  
-    
-    mod_type = doc_entry["mod_type"]
-    name = doc_entry["name"]      
-    
-    try:
-        doc_url = help_doc(mod_type, doc_id)
+        doc_url = help_doc(doc_entry["mod_type"], doc_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching document {doc_id}: {e}")
-    
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching document {doc_id}: {e}"
+        )
+
+    return {**doc_entry, "doc_url": doc_url}
+
+
+@app.get(
+    "/sem/{sem_no}/sub/{sub_id}/doc/{doc_id}/view",
+    tags=["Semester"],
+    summary="Inline view of a document",
+)
+def view_doc(
+    sem_no: int = Path(..., description="Semester number"),
+    sub_id: int = Path(..., ge=1),
+    doc_id: int = Path(..., ge=1),
+    semesters=Depends(validate_sem),
+):
+    validate_sub(sem_no, sub_id)
+    doc_entry = get_doc_entry(sub_id, doc_id)
+
+    doc_url = help_doc(doc_entry["mod_type"], doc_id)
+    filename, content = help_download_file(doc_url)
+
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type=guess_media_type(filename),
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
+
+
+@app.get(
+    "/sem/{sem_no}/sub/{sub_id}/doc/{doc_id}/download",
+    tags=["Semester"],
+    summary="Download a document",
+)
+def download_doc(
+    sem_no: int = Path(..., description="Semester number"),
+    sub_id: int = Path(..., ge=1),
+    doc_id: int = Path(..., ge=1),
+    semesters=Depends(validate_sem),
+):
+    validate_sub(sem_no, sub_id)
+    doc_entry = get_doc_entry(sub_id, doc_id)
+
+    doc_url = help_doc(doc_entry["mod_type"], doc_id)
+    filename, content = help_download_file(doc_url)
+
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get(
+    "/sub/{sub_id}",
+    tags=["Subject"],
+    summary="Get modules for a subject",
+    response_model=ModuleListResponse,
+)
+def get_subject(semsub: List[Dict[str, Any]] = Depends(get_subject_or_404)):
+    return {"status": "ok", "data": semsub}
+
+
+@app.get(
+    "/sub/{sub_id}/doc",
+    tags=["Subject"],
+    summary="Get all documents of a subject",
+    response_model=DocumentListResponse,
+)
+def get_all_docs_from_subject(
+    semsub: List[Dict[str, Any]] = Depends(get_subject_or_404),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+):
+    results = []
+    for entry in semsub:
+        doc_url = get_doc_url_or_500(entry["mod_type"], entry["id"])
+        results.append({**entry, "doc_url": doc_url})
+
+    paginated = paginate_list(results, page, page_size)  # <-- your existing function
     return {
-        "id": doc_id,
-        "mod_type": mod_type,
-        "name": name,
-        "doc_url": doc_url 
-    }     
+        "status": "ok",
+        "data": paginated["items"],
+        "pagination": paginated["pagination"],
+    }
 
 
-@app.get('/sem/{sem_no}/sub/{sub_id}/doc/{doc_id}/download')
-def getsubjects(
-    sem_no: int,
-    sub_id: int,
-    doc_id: int
-):
-    semester = load_sem()
-    if sem_no ==-1 or (sem_no <= len(semester) and sem_no > 0):
-        pass
-    else:
-        raise HTTPException(status_code=400, detail=f'Invalid Semester Number range(-1 or 1 to {len(semester)})')  
-    
-    semesters = load_semsub(sem_no)
-    
-    if any(item["id"] == sub_id for item in semesters):
-        pass
-    elif sub_id == None:
-        return semesters
-    else:
-        raise HTTPException(status_code=400, detail=f'Subject ID {sub_id} is not present in the Semester {sem_no}')
-    
-    try:
-        semsub = load_sub(sub_id)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    
-    doc_entry = next((d for d in semsub if str(d["id"]) == str(doc_id)), None)    
-    
-    if not doc_entry:
-        raise HTTPException(status_code=404, detail=f"Document {doc_id} not found in subject {sub_id}")  
-    
-    mod_type = doc_entry["mod_type"]
-    name = doc_entry["name"]      
-    
-    try:
-        doc_url = help_doc(mod_type, doc_id)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching document {doc_id}: {e}")
-    
+@app.get(
+    "/sub/{sub_id}/doc/{doc_id}",
+    tags=["Subject"],
+    summary="Get metadata of a specific document",
+    response_model=DocumentResponse,
+)
+def get_doc_from_subject(doc_entry: Dict[str, Any] = Depends(get_doc_or_404)):
+    doc_url = get_doc_url_or_500(doc_entry["mod_type"], doc_entry["id"])
+    return {**doc_entry, "doc_url": doc_url}
+
+
+@app.get(
+    "/sub/{sub_id}/doc/{doc_id}/view",
+    tags=["Subject"],
+    summary="Inline view of a subject document",
+)
+def view_doc(doc_entry: Dict[str, Any] = Depends(get_doc_or_404)):
+    doc_url = get_doc_url_or_500(doc_entry["mod_type"], doc_entry["id"])
+    filename, content = help_download_file(doc_url)  # <-- your existing function
+    return build_streaming_response(filename, content, inline=True)
+
+
+@app.get(
+    "/sub/{sub_id}/doc/{doc_id}/download",
+    tags=["Subject"],
+    summary="Download a subject document",
+)
+def download_doc(doc_entry: Dict[str, Any] = Depends(get_doc_or_404)):
+    doc_url = get_doc_url_or_500(doc_entry["mod_type"], doc_entry["id"])
     filename, content = help_download_file(doc_url)
+    return build_streaming_response(filename, content, inline=False)
 
-    return StreamingResponse(
-        io.BytesIO(content),
-        media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
-    )   
-
-@app.get('/sem/{sem_no}/sub/{sub_id}/doc/{doc_id}/view')
-def getsubjects(
-    sem_no: int,
-    sub_id: int,
-    doc_id: int
-):
-    semester = load_sem()
-    if sem_no ==-1 or (sem_no <= len(semester) and sem_no > 0):
-        pass
-    else:
-        raise HTTPException(status_code=400, detail=f'Invalid Semester Number range(-1 or 1 to {len(semester)})')  
-    
-    semesters = load_semsub(sem_no)
-    
-    if any(item["id"] == sub_id for item in semesters):
-        pass
-    elif sub_id == None:
-        return semesters
-    else:
-        raise HTTPException(status_code=400, detail=f'Subject ID {sub_id} is not present in the Semester {sem_no}')
-    
-    try:
-        semsub = load_sub(sub_id)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    
-    doc_entry = next((d for d in semsub if str(d["id"]) == str(doc_id)), None)    
-    
-    if not doc_entry:
-        raise HTTPException(status_code=404, detail=f"Document {doc_id} not found in subject {sub_id}")  
-    
-    mod_type = doc_entry["mod_type"]
-    name = doc_entry["name"]      
-    
-    try:
-        doc_url = help_doc(mod_type, doc_id)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching document {doc_id}: {e}")
-    
-    # Download the file with MoodleSession
-    filename, content = help_download_file(doc_url)
-
-    # Guess media type (basic: PDF, else default)
-    if filename.lower().endswith(".pdf"):
-        media_type = "application/pdf"
-    elif filename.lower().endswith((".png", ".jpg", ".jpeg", ".gif")):
-        media_type = f"image/{filename.split('.')[-1].lower()}"
-    else:
-        media_type = "application/octet-stream"
-
-    return StreamingResponse(
-        io.BytesIO(content),
-        media_type=media_type,
-        headers={"Content-Disposition": f'inline; filename="{filename}"'}
-    )
-
-@app.get("/sub/{sub_id}/doc/{doc_id}/download")
-def download(sub_id: int, doc_id: int):
-    
-    try:
-        semsub = load_sub(sub_id)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))    
-    
-    doc_entry = next((d for d in semsub if str(d["id"]) == str(doc_id)), None)    
-    
-    if not doc_entry:
-        raise HTTPException(status_code=404, detail=f"Document {doc_id} not found in subject {sub_id}")
-
-    mod_type = doc_entry["mod_type"]
-    name = doc_entry["name"]
-    
-    try:
-        doc_url = doc(mod_type, doc_id)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching document {doc_id}: {e}")
-    
-    if not doc_url:
-        raise HTTPException(status_code=404, detail=f"No file available for document {doc_id}")
-
-    filename, content = help_download_file(doc_url)
-
-    return StreamingResponse(
-        io.BytesIO(content),
-        media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
-    )
-
-@app.get("/sub/{sub_id}/doc/{doc_id}/view")
-def view_doc(sub_id: int, doc_id: int):
-    try:
-        semsub = load_sub(sub_id)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-    doc_entry = next((d for d in semsub if str(d["id"]) == str(doc_id)), None)
-    if not doc_entry:
-        raise HTTPException(status_code=404, detail=f"Document {doc_id} not found in subject {sub_id}")
-
-    mod_type = doc_entry["mod_type"]
-
-    try:
-        doc_url = doc(mod_type, doc_id)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching document {doc_id}: {e}")
-
-    if not doc_url:
-        raise HTTPException(status_code=404, detail=f"No file available for document {doc_id}")
-
-    # Download the file with MoodleSession
-    filename, content = help_download_file(doc_url)
-
-    # Guess media type (basic: PDF, else default)
-    if filename.lower().endswith(".pdf"):
-        media_type = "application/pdf"
-    elif filename.lower().endswith((".png", ".jpg", ".jpeg", ".gif")):
-        media_type = f"image/{filename.split('.')[-1].lower()}"
-    else:
-        media_type = "application/octet-stream"
-
-    return StreamingResponse(
-        io.BytesIO(content),
-        media_type=media_type,
-        headers={"Content-Disposition": f'inline; filename="{filename}"'}
-    )
 
 @app.get("/doc")
 def get_doc_from_subject(
@@ -584,7 +434,7 @@ def get_doc_from_subject(
         headers={"Content-Disposition": f'inline; filename="{filename}"'}
     )
 
-@app.get('/attendance') 
+@app.get('/attendance', tags=["Attendance"]) 
 def getattendance(
     filter: Optional[str] = Query("overall", description="Type of Attendance overall or detailed")
 ):
@@ -594,7 +444,8 @@ def getattendance(
 
     return att
 
-@app.get('/attendance/{altid}') 
+
+@app.get("/attendance/{altid}", tags=["Attendance"])
 def getattendance(
     altid: int
 ):

@@ -2,6 +2,11 @@ import re
 from core.utils import fetch_html, SUBJECTS_DIR, ENDLINK_PATH, load_json, dump_json
 from core.auth import get_token
 from bs4 import BeautifulSoup
+from core.subjects import sub, load_sub
+import io, mimetypes
+from fastapi import FastAPI, Path, Query, Depends, HTTPException
+from typing import List, Dict, Any, Optional
+from fastapi.responses import StreamingResponse
 
 def doc(mod_type, doc_id, token):
 	url = f"https://mydy.dypatil.edu/rait/mod/{mod_type}/view.php?id={doc_id}"
@@ -70,3 +75,67 @@ def help_doc(modtype: str, doc_id: int) -> str | None:
         return doc_url
 
     return None
+
+
+def get_doc_entry(sub_id: int, doc_id: int):
+    try:
+        semsub = load_sub(sub_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    doc_entry = next((d for d in semsub if str(d["id"]) == str(doc_id)), None)
+    if not doc_entry:
+        raise HTTPException(
+            status_code=404, detail=f"Document {doc_id} not found in subject {sub_id}"
+        )
+    return doc_entry
+
+
+def guess_media_type(filename: str) -> str:
+    mime, _ = mimetypes.guess_type(filename)
+    return mime or "application/octet-stream"
+
+
+def build_streaming_response(filename: str, content: bytes, inline: bool = True):
+    disposition = "inline" if inline else "attachment"
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type=guess_media_type(filename) if inline else "application/octet-stream",
+        headers={"Content-Disposition": f'{disposition}; filename="{filename}"'},
+    )
+
+
+def get_subject_or_404(sub_id: int = Path(..., ge=1)):
+    """Fetch subject or raise 404."""
+    try:
+        semsub = load_sub(sub_id)  # <-- your existing function
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    if not semsub:
+        raise HTTPException(
+            status_code=404, detail=f"No data found for subject {sub_id}"
+        )
+    return semsub
+
+
+def get_doc_or_404(
+    sub_id: int = Path(..., ge=1),
+    doc_id: int = Path(..., ge=1),
+    semsub: List[Dict[str, Any]] = Depends(get_subject_or_404),
+):
+    doc_entry = next((d for d in semsub if str(d["id"]) == str(doc_id)), None)
+    if not doc_entry:
+        raise HTTPException(
+            status_code=404, detail=f"Document {doc_id} not found in subject {sub_id}"
+        )
+    return doc_entry
+
+
+def get_doc_url_or_500(mod_type: str, doc_id: int):
+    """Fetch document URL or raise 500."""
+    try:
+        return help_doc(mod_type, doc_id)  # <-- your existing function
+    except Exception as e:
+        logger.exception(f"help_doc failed for {mod_type} #{doc_id}")
+        raise HTTPException(status_code=500, detail="Internal error fetching document")

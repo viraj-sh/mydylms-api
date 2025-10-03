@@ -111,3 +111,23 @@ def get_valid_sem_no(sem_no: int):
             detail=f'Invalid Semester Number. Allowed: -1 or 1 to {len(semesters)}'
         )
     return sem_no, semesters
+
+
+def validate_sem(sem_no: int):
+    semesters = load_sem()
+    if sem_no != -1 and not (1 <= sem_no <= len(semesters)):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid Semester Number. Allowed: -1 or 1 to {len(semesters)}",
+        )
+    return semesters
+
+
+def validate_sub(sem_no: int, sub_id: int):
+    semesters = load_semsub(sem_no)
+    if not any(item["id"] == sub_id for item in semesters):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Subject ID {sub_id} not found in Semester {sem_no}",
+        )
+    return semesters
