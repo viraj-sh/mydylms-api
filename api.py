@@ -2,10 +2,9 @@ import io
 import os
 import requests
 import logging
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, Path
 from fastapi.responses import JSONResponse
-from typing import Annotated, Optional, List
-from pathlib import Path
+from typing import Annotated, Optional, List, Dict, Any
 from fastapi.responses import StreamingResponse, FileResponse
 
 from core.auth import login, verify_token, get_token
@@ -17,8 +16,9 @@ from core.download import download_file, help_download_file
 from core.attendence import o_attendance, d_attendance, s_attendance
 from core.exceptions import add_exception_handlers
 from core.logging_config import setup_logging
+from core.pagination import paginate_list
 from schema.pydantic_auth import Auth, MessageResponse, HealthResponse, LoginSuccessResponse, LoginFailureResponse, MeResponse, TokenResponse, DeleteResponse
-from schema.pydantic_sem import Subject, Semester, Module
+from schema.pydantic_sem import Subject, Semester, Module, ListResponse, SemesterListResponse, SubjectListResponse, ModuleListResponse, SemesterResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 setup_logging()
@@ -71,7 +71,12 @@ def authlogin(auth: Auth):
 
     credentials = {"email": auth.email, "password": auth.password, "token": token}
     dump_json(credentials, CREDENTIALS_PATH)
-    return {"token": token, "success": True, "message": "Login successful"}
+    return {
+        "status": "ok",
+        "token": token,
+        "success": True,
+        "message": "Login successful",
+    }
 
 @app.get("/auth/me", tags=["Auth"], summary="Get current stored credentials", response_model=MeResponse)
 def authme():
@@ -107,37 +112,84 @@ def delete_creds():
         raise HTTPException(status_code=404, detail="Credentials file not found")
     os.remove(CREDENTIALS_PATH)
     return {"success": True, "message": "All credentials deleted"}
-    
-@app.get('/sem', response_model=List[Semester])
+
+
+@app.get(
+    "/sem",
+    tags=["Semester"],
+    summary="Get all semesters",
+    response_model=SemesterListResponse,
+)
 def get_all_semesters():
-    return load_sem()
+    semesters = load_sem()
+    if not semesters:
+        raise HTTPException(status_code=404, detail="No semesters found")
+    return {"status": "ok", "data": semesters}
 
-@app.get('/sem/{sem_no}', response_model=Semester)
-def get_semester(sem_no: int):
-    sem_no, semesters = get_valid_sem_no(sem_no)
-    return semesters[sem_no - 1]
 
-@app.get('/sem/{sem_no}/sub', response_model=List[Subject])
-def get_subjects(sem_no: int):
+@app.get(
+    "/sem/{sem_no}",
+    tags=["Semester"],
+    summary="Get a specific semester",
+    response_model=SemesterResponse,
+)
+def get_semester(
+    sem_no: int = Path(..., description="Semester number. Use -1 for latest semester")
+):
     sem_no, semesters = get_valid_sem_no(sem_no)
+    return {"status": "ok", "data": semesters[sem_no - 1]}
+
+
+@app.get(
+    "/sem/{sem_no}/sub",
+    tags=["Semester"],
+    summary="Get all subjects for a semester",
+    response_model=SubjectListResponse,
+)
+def get_subjects(
+    sem_no: int = Path(..., description="Semester number. Use -1 for latest semester")
+):
+    sem_no, _ = get_valid_sem_no(sem_no)
     subjects = load_semsub(sem_no)
     if not subjects:
         raise HTTPException(
-            status_code=404,
-            detail=f'No subjects found in Semester {sem_no}'
+            status_code=404, detail=f"No subjects found in Semester {sem_no}"
         )
-    return subjects
+    return {"status": "ok", "data": subjects}
 
-@app.get('/sem/{sem_no}/sub/{sub_id}', response_model=List[Module])
-def get_subject(sem_no: int, sub_id: int):
-    sem_no, semesters = get_valid_sem_no(sem_no)
+@app.get(
+    "/sem/{sem_no}/sub/{sub_id}",
+    tags=["Semester"],
+    summary="Get modules for a specific subject",
+    response_model=ModuleListResponse,
+)
+def get_subject(
+    sem_no: int = Path(..., description="Semester number. Use -1 for latest semester"),
+    sub_id: int = Path(..., ge=1, description="Subject ID (>=1)"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+):
+    sem_no, _ = get_valid_sem_no(sem_no)
     subjects = load_semsub(sem_no)
     if not any(s["id"] == sub_id for s in subjects):
         raise HTTPException(
             status_code=404,
-            detail=f'Subject ID {sub_id} not found in Semester {sem_no}'
+            detail=f"Subject ID {sub_id} not found in Semester {sem_no}",
         )
-    return load_sub(sub_id)  
+
+    modules = load_sub(sub_id)
+    if not modules:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No modules found for Subject {sub_id} in Semester {sem_no}",
+        )
+
+    paginated = paginate_list(modules, page, page_size)
+    return {
+        "status": "ok",
+        "data": paginated["items"],
+        "pagination": paginated["pagination"],
+    }
 
 @app.get('/sem/{sem_no}/sub/{sub_id}/doc')
 def getsubjects(
@@ -220,7 +272,7 @@ def get_all_docs_from_subject(sub_id: int):
         })
 
     return results
-    
+
 @app.get("/sub/{sub_id}/doc/{doc_id}")
 def get_doc_from_subject(sub_id: int, doc_id: int):
     try:
@@ -247,7 +299,7 @@ def get_doc_from_subject(sub_id: int, doc_id: int):
         "name": name,
         "doc_url": doc_url 
     }
-    
+
 
 @app.get('/sem/{sem_no}/sub/{sub_id}/doc/{doc_id}')
 def getsubjects(
@@ -294,8 +346,8 @@ def getsubjects(
         "name": name,
         "doc_url": doc_url 
     }     
-    
-    
+
+
 @app.get('/sem/{sem_no}/sub/{sub_id}/doc/{doc_id}/download')
 def getsubjects(
     sem_no: int,
@@ -342,7 +394,7 @@ def getsubjects(
         media_type="application/octet-stream",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )   
-    
+
 @app.get('/sem/{sem_no}/sub/{sub_id}/doc/{doc_id}/view')
 def getsubjects(
     sem_no: int,
@@ -398,7 +450,7 @@ def getsubjects(
         media_type=media_type,
         headers={"Content-Disposition": f'inline; filename="{filename}"'}
     )
-    
+
 @app.get("/sub/{sub_id}/doc/{doc_id}/download")
 def download(sub_id: int, doc_id: int):
     
@@ -468,7 +520,7 @@ def view_doc(sub_id: int, doc_id: int):
         media_type=media_type,
         headers={"Content-Disposition": f'inline; filename="{filename}"'}
     )
-    
+
 @app.get("/doc")
 def get_doc_from_subject(
     doc_id: int = Query(..., description="Document ID"),
@@ -485,7 +537,7 @@ def get_doc_from_subject(
         "mod_type": mod_type,
         "doc_url": doc_url 
     }
-    
+
 @app.get("/doc/download")
 def get_doc_from_subject(
     doc_id: int = Query(..., description="Document ID"),
@@ -504,7 +556,7 @@ def get_doc_from_subject(
         media_type="application/octet-stream",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
-    
+
 @app.get("/doc/view")
 def get_doc_from_subject(
     doc_id: int = Query(..., description="Document ID"),
@@ -531,7 +583,7 @@ def get_doc_from_subject(
         media_type=media_type,
         headers={"Content-Disposition": f'inline; filename="{filename}"'}
     )
-    
+
 @app.get('/attendance') 
 def getattendance(
     filter: Optional[str] = Query("overall", description="Type of Attendance overall or detailed")
