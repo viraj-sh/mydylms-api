@@ -3,7 +3,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 from typing import Annotated, Optional
 from pathlib import Path
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 
 from core.auth import login, verify_token, get_token
 from core.utils import dump_json, load_json, load_json_token, CREDENTIALS_PATH
@@ -40,10 +40,16 @@ def health_check():
         'status': 'OK'
     }
     
-@app.get('/creds')
+@app.get("/creds")
 def mycreds():
     creds = load_json(CREDENTIALS_PATH)
-    return creds
+    if not creds:
+        # either file missing or empty
+        return {
+            "status": "error",
+            "message": "No credentials found. Please login via /auth/login first."
+        }
+    return {"status": "ok", "credentials": creds}
     
 @app.post('/auth/login')
 def authlogin(auth: Auth):
@@ -584,6 +590,10 @@ def getattendance(
 ):
     att = s_attendance(altid)
     return att
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return FileResponse("static/favicon.ico")
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", debug = True)
