@@ -11,9 +11,11 @@ SEM_PATH = Path("./data/sem.json")
 SUBJECTS_DIR = Path("./data/subjects/")
 ENDLINK_PATH = Path("./data/endlink.json")
 
+
 def save_token(token: str, env_path: Path):
     load_dotenv(env_path)
     set_key(str(env_path), "TOKEN", token)
+
 
 def load_token(env_path: Path) -> str | None:
     if not env_path.exists():
@@ -21,11 +23,13 @@ def load_token(env_path: Path) -> str | None:
     config = dotenv_values(env_path)
     return config.get("TOKEN")
 
+
 def load_json_token(credentials_path: Path) -> str | None:
     if not credentials_path.exists():
         return None
     creds = load_json(Path(credentials_path))
     return creds["token"]
+
 
 def remove_token(env_path: Path):
     if not env_path.exists():
@@ -35,28 +39,36 @@ def remove_token(env_path: Path):
         lines = env_path.read_text().splitlines()
         new_lines = [line for line in lines if not line.startswith("TOKEN=")]
         env_path.write_text("\n".join(new_lines))
-        
+
+
 def dump_json(data, json_path: Path, indent: int = 4):
-    json_path.parent.mkdir(parents=True, exist_ok=True)  
+    json_path.parent.mkdir(parents=True, exist_ok=True)
     with json_path.open("w", encoding="utf-8") as f:
-        json.dump(data, f, indent=indent, ensure_ascii=False)  
-        
+        json.dump(data, f, indent=indent, ensure_ascii=False)
+
+
 def load_json(json_path):
     json_path = Path(json_path)
     if not json_path.exists():
         return None
-    
+
     with json_path.open("r", encoding="utf-8") as f:
-        return json.load(f)              
+        return json.load(f)
+
 
 def retry_session() -> requests.Session:
     retry_strategy = Retry(
-        total=5,                # increased retries
-        connect=5,              # retry connection errors
-        read=5,                 # retry read timeouts
-        backoff_factor=1,       # exponential backoff: 1s, 2s, 4s...
+        total=5,  # increased retries
+        connect=5,  # retry connection errors
+        read=5,  # retry read timeouts
+        backoff_factor=1,  # exponential backoff: 1s, 2s, 4s...
         status_forcelist=[502, 503, 504, 408],
-        allowed_methods=["HEAD", "GET", "OPTIONS", "POST"],  # explicitly allow POST retries
+        allowed_methods=[
+            "HEAD",
+            "GET",
+            "OPTIONS",
+            "POST",
+        ],  # explicitly allow POST retries
         raise_on_status=False,  # don't raise immediately, let requests handle it
     )
     adapter = HTTPAdapter(max_retries=retry_strategy)
@@ -66,7 +78,7 @@ def retry_session() -> requests.Session:
     return session
 
 
-def fetch_html(url :str, token :str):
+def fetch_html(url: str, token: str):
     session = requests.Session()
     session.cookies.set("MoodleSession", token)
     resp = session.get(url, timeout=10)

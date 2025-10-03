@@ -16,7 +16,7 @@ def d_attendance():
     for row in table_rows:
         cells = row.find_all("td")
         if len(cells) < 5:
-            continue  
+            continue
 
         subject = cells[0].text.strip()
         total_classes = int(cells[1].text.strip())
@@ -38,14 +38,16 @@ def d_attendance():
         percentage_str = cells[4].text.strip().replace("--", "")
         percentage = float(percentage_str) if percentage_str else None
 
-        data.append({
-            "Subject": subject,
-            "Total Classes": total_classes,
-            "Present": present,
-            "Absent": absent,
-            "Percentage": percentage,
-            "altid": attenid
-        })
+        data.append(
+            {
+                "Subject": subject,
+                "Total Classes": total_classes,
+                "Present": present,
+                "Absent": absent,
+                "Percentage": percentage,
+                "altid": attenid,
+            }
+        )
 
     return data
 
@@ -59,9 +61,10 @@ def o_attendance():
     if circular_value:
         value = circular_value.get_text(strip=True)
         import re
+
         match = re.match(r"(\d+)", value)
         return match.group(1) if match else None
-    return None    
+    return None
 
 
 def s_attendance(altid):
@@ -84,4 +87,4 @@ def s_attendance(altid):
             "Status": cells[4].text.strip(),
         }
         records.append(record)
-    return records    
+    return records

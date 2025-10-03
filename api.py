@@ -8,18 +8,52 @@ from typing import Annotated, Optional, List, Dict, Any, Literal
 from fastapi.responses import StreamingResponse, FileResponse
 
 from core.auth import login, verify_token, get_token
-from core.utils import dump_json, load_json, load_json_token, CREDENTIALS_PATH
-from core.semester import sem, sem_sub, load_semsub, load_sem, get_valid_sem_no, validate_sem, validate_sub
-from core.subjects import sub, load_sub
-from core.documents import doc, help_doc, get_doc_entry, guess_media_type, build_streaming_response, get_subject_or_404, get_subject_or_404, get_doc_or_404, get_doc_url_or_500
-from core.download import download_file, help_download_file
+from core.utils import dump_json, load_json, CREDENTIALS_PATH
+from core.semester import (
+    sem,
+    sem_sub,
+    load_semsub,
+    load_sem,
+    get_valid_sem_no,
+    validate_sem,
+    validate_sub,
+)
+from core.subjects import load_sub
+from core.documents import (
+    help_doc,
+    get_doc_entry,
+    guess_media_type,
+    build_streaming_response,
+    get_subject_or_404,
+    get_doc_or_404,
+    get_doc_url_or_500,
+)
+from core.download import help_download_file
 from core.attendence import o_attendance, d_attendance, s_attendance
 from core.exceptions import add_exception_handlers
 from core.logging_config import setup_logging
 from core.pagination import paginate_list
-from schema.pydantic_auth import Auth, MessageResponse, HealthResponse, LoginSuccessResponse, LoginFailureResponse, MeResponse, TokenResponse, DeleteResponse
+from schema.pydantic_auth import (
+    Auth,
+    MessageResponse,
+    HealthResponse,
+    LoginSuccessResponse,
+    LoginFailureResponse,
+    MeResponse,
+    TokenResponse,
+    DeleteResponse,
+)
 from schema.pydantic_doc import DocumentListResponse, DocumentResponse
-from schema.pydantic_sem import Subject, Semester, Module, ListResponse, SemesterListResponse, SubjectListResponse, ModuleListResponse, SemesterResponse
+from schema.pydantic_sem import (
+    Subject,
+    Semester,
+    Module,
+    ListResponse,
+    SemesterListResponse,
+    SubjectListResponse,
+    ModuleListResponse,
+    SemesterResponse,
+)
 from schema.pydantic_att import AttendanceResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -29,28 +63,33 @@ logger = logging.getLogger("mydylms")
 app = FastAPI(title="Unofficial mydylms-api API")
 
 origins = [
-    "http://127.0.0.1:5500",   # add all your dev URLs here
-    "*",                       # or "*" for all origins (be careful in production)
+    "http://127.0.0.1:5500",  # add all your dev URLs here
+    "*",  # or "*" for all origins (be careful in production)
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],   # Allow all HTTP methods including OPTIONS
+    allow_methods=["*"],  # Allow all HTTP methods including OPTIONS
     allow_headers=["*"],
 )
 
 add_exception_handlers(app)
 logger.info("Application startup complete")
 
+
 @app.get("/", tags=["System"], summary="Root endpoint", response_model=MessageResponse)
 def home():
     return {"message": "Unofficial MY-DY-Lms Api"}
 
-@app.get("/health", tags=["System"], summary="Health check", response_model=HealthResponse)
+
+@app.get(
+    "/health", tags=["System"], summary="Health check", response_model=HealthResponse
+)
 def health_check():
     return {"status": "OK"}
+
 
 @app.post(
     "/auth/login",
@@ -66,7 +105,9 @@ def authlogin(auth: Auth):
     try:
         token = login(auth.email, auth.password)
     except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=503, detail=f"External login service error: {e}")
+        raise HTTPException(
+            status_code=503, detail=f"External login service error: {e}"
+        )
 
     if not token:
         raise HTTPException(status_code=400, detail="Token not found")
@@ -80,15 +121,29 @@ def authlogin(auth: Auth):
         "message": "Login successful",
     }
 
-@app.get("/auth/me", tags=["Auth"], summary="Get current stored credentials", response_model=MeResponse)
+
+@app.get(
+    "/auth/me",
+    tags=["Auth"],
+    summary="Get current stored credentials",
+    response_model=MeResponse,
+)
 def authme():
     creds = load_json(CREDENTIALS_PATH)
     if not creds:
-        raise HTTPException(status_code=404, detail="No credentials found. Please login first.")
+        raise HTTPException(
+            status_code=404, detail="No credentials found. Please login first."
+        )
     safe_creds = {k: v for k, v in creds.items() if k != "password"}
     return {"status": "ok", "credentials": safe_creds}
 
-@app.get("/auth/token", tags=["Auth"], summary="Get or regenerate token", response_model=TokenResponse)
+
+@app.get(
+    "/auth/token",
+    tags=["Auth"],
+    summary="Get or regenerate token",
+    response_model=TokenResponse,
+)
 def authtoken(regenerate: bool = Query(False, description="Regenerate token if true")):
     try:
         token = get_token(regenerate=regenerate)
@@ -97,18 +152,33 @@ def authtoken(regenerate: bool = Query(False, description="Regenerate token if t
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Token error: {e}")
 
-@app.delete("/auth/token", tags=["Auth"], summary="Delete stored token", response_model=DeleteResponse)
+
+@app.delete(
+    "/auth/token",
+    tags=["Auth"],
+    summary="Delete stored token",
+    response_model=DeleteResponse,
+)
 def delete_token():
     creds = load_json(CREDENTIALS_PATH)
     if not creds:
         raise HTTPException(status_code=404, detail="credentials.json not found")
     if not creds.get("token"):
-        return {"success": False, "message": "Token is not present"}  # soft fail, keep as 200
+        return {
+            "success": False,
+            "message": "Token is not present",
+        }  # soft fail, keep as 200
     creds["token"] = ""
     dump_json(creds, CREDENTIALS_PATH)
     return {"success": True, "message": "Token deleted"}
 
-@app.delete("/auth", tags=["Auth"], summary="Delete all stored credentials", response_model=DeleteResponse)
+
+@app.delete(
+    "/auth",
+    tags=["Auth"],
+    summary="Delete all stored credentials",
+    response_model=DeleteResponse,
+)
 def delete_creds():
     if not os.path.exists(CREDENTIALS_PATH):
         raise HTTPException(status_code=404, detail="Credentials file not found")
@@ -405,9 +475,11 @@ def get_subject_attendance(
 
     return {"status": "ok", "type": "subject", "data": att}
 
+
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     return FileResponse("static/favicon.ico")
 
-if __name__ == '__main__':
-    app.run(host="0.0.0.0", debug = True)
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", debug=True)

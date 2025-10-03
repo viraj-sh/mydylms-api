@@ -3,6 +3,7 @@ import logging.config
 import os
 import json
 
+
 def setup_logging():
     log_dir = "logs"
     os.makedirs(log_dir, exist_ok=True)
@@ -11,12 +12,10 @@ def setup_logging():
         "version": 1,
         "disable_existing_loggers": False,
         "formatters": {
-            "standard": {
-                "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-            },
+            "standard": {"format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s"},
             "json": {
                 "()": "pythonjsonlogger.jsonlogger.JsonFormatter",
-                "fmt": "%(asctime)s %(levelname)s %(name)s %(message)s %(pathname)s %(lineno)d"
+                "fmt": "%(asctime)s %(levelname)s %(name)s %(message)s %(pathname)s %(lineno)d",
             },
         },
         "handlers": {

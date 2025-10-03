@@ -4,6 +4,7 @@ from urllib.parse import urlparse, unquote
 from core.auth import get_token
 from core.utils import load_json, dump_json
 
+
 def download_file(file_url: str, token: str) -> tuple[str, bytes]:
     path = urlparse(file_url).path
     filename = unquote(os.path.basename(path)) or "downloaded_file"
@@ -14,6 +15,7 @@ def download_file(file_url: str, token: str) -> tuple[str, bytes]:
     resp.raise_for_status()
 
     return filename, resp.content
+
 
 def help_download_file(file_url: str):
     token = get_token()

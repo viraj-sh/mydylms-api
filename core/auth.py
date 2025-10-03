@@ -1,6 +1,14 @@
 import requests
 from bs4 import BeautifulSoup
-from core.utils import retry_session, fetch_html, load_json_token, CREDENTIALS_PATH, load_json, dump_json
+from core.utils import (
+    retry_session,
+    fetch_html,
+    load_json_token,
+    CREDENTIALS_PATH,
+    load_json,
+    dump_json,
+)
+
 
 def get_payload(email, password):
     payload = {
@@ -9,9 +17,10 @@ def get_payload(email, password):
         "uname": email,
         "password": password,
         "rememberusername": "1",
-        "logintoken": "None"
+        "logintoken": "None",
     }
     return payload
+
 
 def login(email, password):
     login_url = "https://mydy.dypatil.edu/rait/login/index.php"
@@ -31,6 +40,7 @@ def login(email, password):
         if cookie.name.lower() == "moodlesession":
             return cookie.value
 
+
 def verify_token(token: str) -> bool:
     url = "https://mydy.dypatil.edu/rait/my/"
 
@@ -43,6 +53,7 @@ def verify_token(token: str) -> bool:
     if soup.select_one("form#login"):
         return False
     return True
+
 
 def get_token(regenerate: bool = False) -> str:
     creds = load_json(CREDENTIALS_PATH)

@@ -37,6 +37,7 @@ class ModuleListResponse(BaseModel):  # for /sub/{sub_id}
     status: str
     data: List[Dict[str, Any]]
 
+
 class SemesterResponse(BaseModel):
     status: str
     data: Semester

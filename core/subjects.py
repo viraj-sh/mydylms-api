@@ -6,50 +6,68 @@ from core.utils import fetch_html, load_json
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
+
 def extract_resource_id(href):
-	parsed = urlparse(href)
-	if "/mod/" in parsed.path and "/view.php" in parsed.path:
-		qs = parse_qs(parsed.query)
-		if "id" in qs:
-			return qs["id"][0]
-	return None
+    parsed = urlparse(href)
+    if "/mod/" in parsed.path and "/view.php" in parsed.path:
+        qs = parse_qs(parsed.query)
+        if "id" in qs:
+            return qs["id"][0]
+    return None
+
 
 def extract_module_type(href):
-	parsed = urlparse(href)
-	parts = parsed.path.split('/')
-	try:
-		idx = parts.index('mod')
-		return parts[idx + 1]
-	except (ValueError, IndexError):
-		return None
-        
+    parsed = urlparse(href)
+    parts = parsed.path.split("/")
+    try:
+        idx = parts.index("mod")
+        return parts[idx + 1]
+    except (ValueError, IndexError):
+        return None
+
+
 def parse_documents(html):
-	soup = BeautifulSoup(html, "html.parser")
-	docs = []
+    soup = BeautifulSoup(html, "html.parser")
+    docs = []
 
-	for a in soup.find_all("a", href=True):
-		href = a["href"]
-		docid = extract_resource_id(href)
-		if not docid:
-			continue
-		mod_type = extract_module_type(href)
-		if not mod_type:
-			continue
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        docid = extract_resource_id(href)
+        if not docid:
+            continue
+        mod_type = extract_module_type(href)
+        if not mod_type:
+            continue
 
-		div = a.find("div")
-		text = div.get_text(" ", strip=True) if div else a.get_text(" ", strip=True)
-		text = text.replace('\xa0', ' ').replace('&nbsp;', ' ').replace('&nbsp', ' ').replace("Presentation (Secured PDF)", "").replace("File", "").replace("Presentation (Download)", "").replace("Reference URL", "").replace("Discussion Forum", "").replace("Question Bank", "").replace("Quiz", "").replace("File", "").replace("File", "").replace("File", "").replace("File", "").replace("File", "").replace("File", "").strip()
+        div = a.find("div")
+        text = div.get_text(" ", strip=True) if div else a.get_text(" ", strip=True)
+        text = (
+            text.replace("\xa0", " ")
+            .replace("&nbsp;", " ")
+            .replace("&nbsp", " ")
+            .replace("Presentation (Secured PDF)", "")
+            .replace("File", "")
+            .replace("Presentation (Download)", "")
+            .replace("Reference URL", "")
+            .replace("Discussion Forum", "")
+            .replace("Question Bank", "")
+            .replace("Quiz", "")
+            .replace("File", "")
+            .replace("File", "")
+            .replace("File", "")
+            .replace("File", "")
+            .replace("File", "")
+            .replace("File", "")
+            .strip()
+        )
 
-		first_word = text.split()[0] if text else ""
-		if first_word.lower() == "training" or (first_word and first_word[0].isdigit()):
-			continue
+        first_word = text.split()[0] if text else ""
+        if first_word.lower() == "training" or (first_word and first_word[0].isdigit()):
+            continue
 
-		docs.append({
-			"id": docid,
-			"name": text,
-			"mod_type": mod_type
-		})
-	return docs
+        docs.append({"id": docid, "name": text, "mod_type": mod_type})
+    return docs
+
 
 def sub(sub_id, token):
     url = f"https://mydy.dypatil.edu/rait/course/view.php?id={sub_id}"
@@ -63,6 +81,7 @@ def sub(sub_id, token):
     # dump_json(docs, Path(f"./data/{sub_id}.json"))
     return docs
 
+
 def load_sub(sub_id: int) -> list[dict]:
     sub_file = Path(f"./data/subjects/{sub_id}.json")
     if sub_file.exists():
@@ -70,4 +89,4 @@ def load_sub(sub_id: int) -> list[dict]:
     token = get_token()
     data = sub(sub_id, token)
     dump_json(data, sub_file)
-    return data   
+    return data

@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
 
+
 class DocumentResponse(BaseModel):
     id: int
     mod_type: str
