@@ -371,68 +371,6 @@ def download_doc(doc_entry: Dict[str, Any] = Depends(get_doc_or_404)):
     return build_streaming_response(filename, content, inline=False)
 
 
-@app.get("/doc")
-def get_doc_from_subject(
-    doc_id: int = Query(..., description="Document ID"),
-    mod_type: str = Query(...,description="Mod Type of the Document")
-):
- 
-    try:
-        doc_url = help_doc(mod_type, doc_id)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching document {doc_id}: {e}")
-    
-    return {
-        "id": doc_id,
-        "mod_type": mod_type,
-        "doc_url": doc_url 
-    }
-
-@app.get("/doc/download")
-def get_doc_from_subject(
-    doc_id: int = Query(..., description="Document ID"),
-    mod_type: str = Query(...,description="Mod Type of the Document")
-):
- 
-    try:
-        doc_url = doc(mod_type, doc_id)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching document {doc_id}: {e}")
-    
-    filename, content = help_download_file(doc_url)
-
-    return StreamingResponse(
-        io.BytesIO(content),
-        media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
-    )
-
-@app.get("/doc/view")
-def get_doc_from_subject(
-    doc_id: int = Query(..., description="Document ID"),
-    mod_type: str = Query(...,description="Mod Type of the Document")
-):
- 
-    try:
-        doc_url = doc(mod_type, doc_id)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching document {doc_id}: {e}")
-    
-    filename, content = help_download(doc_url)
-
-    # Guess media type (basic: PDF, else default)
-    if filename.lower().endswith(".pdf"):
-        media_type = "application/pdf"
-    elif filename.lower().endswith((".png", ".jpg", ".jpeg", ".gif")):
-        media_type = f"image/{filename.split('.')[-1].lower()}"
-    else:
-        media_type = "application/octet-stream"
-
-    return StreamingResponse(
-        io.BytesIO(content),
-        media_type=media_type,
-        headers={"Content-Disposition": f'inline; filename="{filename}"'}
-    )
 
 @app.get('/attendance', tags=["Attendance"]) 
 def getattendance(
