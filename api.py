@@ -44,7 +44,6 @@ def health_check():
 def mycreds():
     creds = load_json(CREDENTIALS_PATH)
     if not creds:
-        # either file missing or empty
         return {
             "status": "error",
             "message": "No credentials found. Please login via /auth/login first."
@@ -77,14 +76,20 @@ def authlogin(auth: Auth):
         # Unexpected login failure
         raise HTTPException(status_code=500, detail=str(e))
     
-@app.get('/auth/token')    
+@app.get("/auth/token")
 def authtoken():
-    token = get_token()
-    status = verify_token(token)
-    return JSONResponse(
-                status_code=201,
-                content={"token": token,"valid":status}
-            )
+    try:
+        token = get_token()
+        status = verify_token(token)
+        return JSONResponse(
+            status_code=200,
+            content={"token": token, "valid": status}
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=400,
+            content={"token": None, "valid": False, "error": str(e)}
+        )
     
 @app.delete('/auth/delete')    
 def authdeltoken():

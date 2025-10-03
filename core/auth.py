@@ -45,14 +45,14 @@ def verify_token(token: str) -> bool:
 def get_token() -> str:
     creds = load_json(CREDENTIALS_PATH)
     if not creds or "email" not in creds or "password" not in creds:
-        raise HTTPException(status_code=500, detail="Email or password not found in credentials.json")
+        raise ValueError("Email or password not found in credentials.json")
     email = creds["email"]
     password = creds["password"]
     token = creds.get("token")
     if not token or not verify_token(token):
         token = login(email, password)
         if not token:
-            raise HTTPException(status_code=500, detail="Failed to generate token")
+            raise ValueError("Failed to generate token")
         creds["token"] = token
         dump_json(creds, CREDENTIALS_PATH)
     return token
