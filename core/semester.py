@@ -100,3 +100,14 @@ def load_semsub(sem_num: int) -> list[dict]:
     subjects = sem_sub(SEM_PATH, sem_num)
     dump_json(subjects, sem_file)
     return subjects
+
+def get_valid_sem_no(sem_no: int):
+    semesters = load_sem()
+    if sem_no == -1:
+        sem_no = len(semesters)
+    if sem_no < 1 or sem_no > len(semesters):
+        raise HTTPException(
+            status_code=400,
+            detail=f'Invalid Semester Number. Allowed: -1 or 1 to {len(semesters)}'
+        )
+    return sem_no, semesters

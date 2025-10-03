@@ -2,18 +2,19 @@ import io
 import os
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
-from typing import Annotated, Optional
+from typing import Annotated, Optional, List
 from pathlib import Path
 from fastapi.responses import StreamingResponse, FileResponse
 
 from core.auth import login, verify_token, get_token
 from core.utils import dump_json, load_json, load_json_token, CREDENTIALS_PATH
-from core.semester import sem, sem_sub, load_semsub, load_sem
+from core.semester import sem, sem_sub, load_semsub, load_sem, get_valid_sem_no
 from core.subjects import sub, load_sub
 from core.documents import doc, help_doc
 from core.download import download_file, help_download_file
 from core.attendence import o_attendance, d_attendance, s_attendance
 from schema.pydantic_auth import Auth
+from schema.pydantic_sem import Subject, Semester, Module
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
@@ -110,84 +111,36 @@ def delete_creds():
     os.remove(CREDENTIALS_PATH)
     return {"success": True, "message": "All credentials deleted"}
     
-@app.get('/sem')    
-def getsemesters(
-    sem_no: Optional[int] = Query(None, description="Semester Number")
-):
-    semester = load_sem()
-    if sem_no == None or sem_no ==-1 or (sem_no <= len(semester) and sem_no > 0):
-        pass
-    else:
-        raise HTTPException(status_code=400, detail=f'Invalid Semester Number range(-1 or 1 to {len(semester)})')
-    
-    if sem_no == None:
-        pass
-    elif sem_no <= len(semester):
-        if sem_no == -1:
-            semester = semester[sem_no]
-        else:
-            semester = semester[sem_no-1]
-    else:
-        HTTPException(status_code=404, detail=f"Invalid Semester Number should be less than {len(semester)}")
-    return semester
+@app.get('/sem', response_model=List[Semester])
+def get_all_semesters():
+    return load_sem()
 
+@app.get('/sem/{sem_no}', response_model=Semester)
+def get_semester(sem_no: int):
+    sem_no, semesters = get_valid_sem_no(sem_no)
+    return semesters[sem_no - 1]
 
+@app.get('/sem/{sem_no}/sub', response_model=List[Subject])
+def get_subjects(sem_no: int):
+    sem_no, semesters = get_valid_sem_no(sem_no)
+    subjects = load_semsub(sem_no)
+    if not subjects:
+        raise HTTPException(
+            status_code=404,
+            detail=f'No subjects found in Semester {sem_no}'
+        )
+    return subjects
 
-@app.get('/sem/{sem_no}')    
-def getsemesters(sem_no: int):
-    semester = load_sem()
-    if sem_no ==-1 or (sem_no <= len(semester) and sem_no > 0):
-        pass
-    else:
-        raise HTTPException(status_code=400, detail=f'Invalid Semester Number range(-1 or 1 to {len(semester)})')    
-    
-    semesters = load_semsub(sem_no)
-    
-    return semesters
-
-@app.get('/sem/{sem_no}/sub')
-def getsubjects(
-    sem_no: int,
-    sub_id: Optional[int] = Query(None, description="Subject ID")
-):
-    semester = load_sem()
-    if sem_no ==-1 or (sem_no <= len(semester) and sem_no > 0):
-        pass
-    else:
-        raise HTTPException(status_code=400, detail=f'Invalid Semester Number range(-1 or 1 to {len(semester)})')  
-    
-    semesters = load_semsub(sem_no)
-    
-    if any(item["id"] == sub_id for item in semesters):
-        pass
-    elif sub_id == None:
-        return semesters
-    else:
-        raise HTTPException(status_code=400, detail=f'Invalid Subject ID)')
-    semsub = load_sub(sub_id)
-    return semsub
-
-@app.get('/sem/{sem_no}/sub/{sub_id}')
-def getsubjects(
-    sem_no: int,
-    sub_id: int
-):
-    semester = load_sem()
-    if sem_no ==-1 or (sem_no <= len(semester) and sem_no > 0):
-        pass
-    else:
-        raise HTTPException(status_code=400, detail=f'Invalid Semester Number range(-1 or 1 to {len(semester)})')  
-    
-    semesters = load_semsub(sem_no)
-    
-    if any(item["id"] == sub_id for item in semesters):
-        pass
-    elif sub_id == None:
-        return semesters
-    else:
-        raise HTTPException(status_code=400, detail=f'Subject ID {sub_id} is not present in the Semester {sem_no}')
-    semsub = load_sub(sub_id)
-    return semsub
+@app.get('/sem/{sem_no}/sub/{sub_id}', response_model=List[Module])
+def get_subject(sem_no: int, sub_id: int):
+    sem_no, semesters = get_valid_sem_no(sem_no)
+    subjects = load_semsub(sem_no)
+    if not any(s["id"] == sub_id for s in subjects):
+        raise HTTPException(
+            status_code=404,
+            detail=f'Subject ID {sub_id} not found in Semester {sem_no}'
+        )
+    return load_sub(sub_id)  
 
 @app.get('/sem/{sem_no}/sub/{sub_id}/doc')
 def getsubjects(
