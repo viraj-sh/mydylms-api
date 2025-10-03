@@ -4,7 +4,7 @@ import requests
 import logging
 from fastapi import FastAPI, HTTPException, Query, Request, Path, Depends
 from fastapi.responses import JSONResponse
-from typing import Annotated, Optional, List, Dict, Any
+from typing import Annotated, Optional, List, Dict, Any, Literal
 from fastapi.responses import StreamingResponse, FileResponse
 
 from core.auth import login, verify_token, get_token
@@ -20,6 +20,7 @@ from core.pagination import paginate_list
 from schema.pydantic_auth import Auth, MessageResponse, HealthResponse, LoginSuccessResponse, LoginFailureResponse, MeResponse, TokenResponse, DeleteResponse
 from schema.pydantic_doc import DocumentListResponse, DocumentResponse
 from schema.pydantic_sem import Subject, Semester, Module, ListResponse, SemesterListResponse, SubjectListResponse, ModuleListResponse, SemesterResponse
+from schema.pydantic_att import AttendanceResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 setup_logging()
@@ -371,24 +372,38 @@ def download_doc(doc_entry: Dict[str, Any] = Depends(get_doc_or_404)):
     return build_streaming_response(filename, content, inline=False)
 
 
+@app.get("/att", tags=["Attendance"], summary="Get overall or detailed attendance")
+def get_attendance(
+    type: Literal["overall", "detailed"] = Query(
+        "overall", description="Type of attendance: overall or detailed"
+    )
+) -> Dict[str, Any]:
+    """
+    Returns overall or detailed attendance summary.
+    """
+    att = d_attendance() if type == "detailed" else o_attendance()
+    return {"status": "ok", "data": att}
 
-@app.get('/attendance', tags=["Attendance"]) 
-def getattendance(
-    filter: Optional[str] = Query("overall", description="Type of Attendance overall or detailed")
-):
-    att = o_attendance()
-    if filter == "detailed":
-        att = d_attendance()
 
-    return att
-
-
-@app.get("/attendance/{altid}", tags=["Attendance"])
-def getattendance(
-    altid: int
-):
+@app.get(
+    "/att/{altid}",
+    tags=["Attendance"],
+    summary="Get detailed attendance for a specific subject (alternate ID)",
+    response_model=AttendanceResponse,
+)
+def get_subject_attendance(
+    altid: int = Path(..., description="Subject alternate ID")
+) -> Dict[str, Any]:
+    """
+    Returns detailed attendance for a specific subject by its alternate ID.
+    """
     att = s_attendance(altid)
-    return att
+    if att is None:
+        raise HTTPException(
+            status_code=404, detail=f"No attendance found for subject ALTID {altid}"
+        )
+
+    return {"status": "ok", "type": "subject", "data": att}
 
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
