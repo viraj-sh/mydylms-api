@@ -5,7 +5,7 @@ import logging
 from fastapi import FastAPI, HTTPException, Query, Request, Path, Depends
 from fastapi.responses import JSONResponse
 from typing import Annotated, Optional, List, Dict, Any, Literal
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import FileResponse
 
 from core.auth import login, verify_token, get_token
 from core.utils import dump_json, load_json, CREDENTIALS_PATH
@@ -344,11 +344,7 @@ def view_doc(
     doc_url = help_doc(doc_entry["mod_type"], doc_id)
     filename, content = help_download_file(doc_url)
 
-    return StreamingResponse(
-        io.BytesIO(content),
-        media_type=guess_media_type(filename),
-        headers={"Content-Disposition": f'inline; filename="{filename}"'},
-    )
+    return build_streaming_response(filename, content, inline=True)
 
 
 @app.get(
@@ -368,11 +364,7 @@ def download_doc(
     doc_url = help_doc(doc_entry["mod_type"], doc_id)
     filename, content = help_download_file(doc_url)
 
-    return StreamingResponse(
-        io.BytesIO(content),
-        media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
+    return build_streaming_response(filename, content, inline=True)
 
 
 @app.get(
@@ -438,6 +430,42 @@ def view_doc(doc_entry: Dict[str, Any] = Depends(get_doc_or_404)):
 )
 def download_doc(doc_entry: Dict[str, Any] = Depends(get_doc_or_404)):
     doc_url = get_doc_url_or_500(doc_entry["mod_type"], doc_entry["id"])
+    filename, content = help_download_file(doc_url)
+    return build_streaming_response(filename, content, inline=False)
+
+
+@app.get(
+    "/doc/{mod_type}/{doc_id}",
+    tags=["Document"],
+    summary="Get metadata of a specific document",
+)
+def get_doc_from_subject(doc_id: int, mod_type: str):
+    doc_url = get_doc_url_or_500(mod_type, doc_id)
+    return {
+        "id": doc_id,
+        "mod_type": mod_type,
+        "doc_url": doc_url,
+    }
+
+
+@app.get(
+    "/doc/{mod_type}/{doc_id}/view",
+    tags=["Document"],
+    summary="Inline view of a specific document",
+)
+def view_doc(doc_id: int, mod_type: str):
+    doc_url = get_doc_url_or_500(mod_type, doc_id)
+    filename, content = help_download_file(doc_url)
+    return build_streaming_response(filename, content, inline=True)
+
+
+@app.get(
+    "/doc/{mod_type}/{doc_id}/download",
+    tags=["Document"],
+    summary="Download a specific document",
+)
+def download_doc(doc_id: int, mod_type: str):
+    doc_url = get_doc_url_or_500(mod_type, doc_id)
     filename, content = help_download_file(doc_url)
     return build_streaming_response(filename, content, inline=False)
 

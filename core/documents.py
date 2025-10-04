@@ -106,7 +106,7 @@ def build_streaming_response(filename: str, content: bytes, inline: bool = True)
     return StreamingResponse(
         io.BytesIO(content),
         media_type=guess_media_type(filename) if inline else "application/octet-stream",
-        headers={"Content-Disposition": f'{disposition}; filename="{filename}"'},
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
     )
 
 
